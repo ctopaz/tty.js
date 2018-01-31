@@ -1,6 +1,6 @@
 /**
  * tty.js
- * Copyright (c) 2012, Christopher Jeffrey (MIT License)
+ * Copyright (c) 2012-2013, Christopher Jeffrey (MIT License)
  */
 
 ;(function() {
@@ -30,7 +30,6 @@ var initialTitle = document.title;
  */
 
 var EventEmitter = Terminal.EventEmitter
-  , isMac = Terminal.isMac
   , inherits = Terminal.inherits
   , on = Terminal.on
   , off = Terminal.off
@@ -56,7 +55,16 @@ tty.elements;
  */
 
 tty.open = function() {
-  tty.socket = io.connect();
+  if (document.location.pathname) {
+    var parts = document.location.pathname.split('/')
+      , base = parts.slice(0, parts.length - 1).join('/') + '/'
+      , resource = base.substring(1) + 'socket.io';
+
+    tty.socket = io.connect(null, { resource: resource });
+  } else {
+    tty.socket = io.connect();
+  }
+
   tty.windows = [];
   tty.terms = {};
 
@@ -546,7 +554,10 @@ function Tab(win, socket, cwd) {
     , rows = win.rows
     , cwd;
 
-  Terminal.call(this, cols, rows);
+  Terminal.call(this, {
+    cols: cols,
+    rows: rows
+  });
 
   var button = document.createElement('div');
   button.className = 'tab';
@@ -723,79 +734,65 @@ Tab.prototype.destroy = function() {
 };
 
 Tab.prototype.hookKeys = function() {
+  var self = this;
+
+  // Alt-[jk] to quickly swap between windows.
   this.on('key', function(key, ev) {
-    // ^A for screen-key-like prefix.
-    if (Terminal.screenKeys) {
-      if (this.pendingKey) {
-        this._ignoreNext();
-        this.pendingKey = false;
-        this.specialKeyHandler(key);
-        return;
-      }
-
-      // ^A
-      if (key === '\x01') {
-        this._ignoreNext();
-        this.pendingKey = true;
-        return;
-      }
+    if (Terminal.focusKeys === false) {
+      return;
     }
 
-    // Alt-` to quickly swap between windows.
-    if (key === '\x1b`') {
-      var i = indexOf(tty.windows, this.window) + 1;
+    var offset
+      , i;
 
-      this._ignoreNext();
-      if (tty.windows[i]) return tty.windows[i].highlight();
+    if (key === '\x1bj') {
+      offset = -1;
+    } else if (key === '\x1bk') {
+      offset = +1;
+    } else {
+      return;
+    }
+
+    i = indexOf(tty.windows, this.window) + offset;
+
+    this._ignoreNext();
+
+    if (tty.windows[i]) return tty.windows[i].highlight();
+
+    if (offset > 0) {
       if (tty.windows[0]) return tty.windows[0].highlight();
-
-      return this.window.highlight();
+    } else {
+      i = tty.windows.length - 1;
+      if (tty.windows[i]) return tty.windows[i].highlight();
     }
 
-    // URXVT Keys for tab navigation and creation.
-    // Shift-Left, Shift-Right, Shift-Down
-    if (key === '\x1b[1;2D') {
-      this._ignoreNext();
-      return this.window.previousTab();
-    } else if (key === '\x1b[1;2B') {
-      this._ignoreNext();
-      return this.window.nextTab();
-    } else if (key === '\x1b[1;2C') {
-      this._ignoreNext();
-      return this.window.createTab();
+    return this.window.highlight();
+  });
+
+  this.on('request paste', function(key) {
+    this.socket.emit('request paste', function(err, text) {
+      if (err) return;
+      self.send(text);
+    });
+  });
+
+  this.on('request create', function() {
+    this.window.createTab();
+  });
+
+  this.on('request term', function(key) {
+    if (this.window.tabs[key]) {
+      this.window.tabs[key].focus();
     }
   });
-};
 
-// tmux/screen-like keys
-Tab.prototype.specialKeyHandler = function(key) {
-  var win = this.window;
+  this.on('request term next', function(key) {
+    this.window.nextTab();
+  });
 
-  switch (key) {
-    case '\x01': // ^A
-      this.send(key);
-      break;
-    case 'c':
-      win.createTab();
-      break;
-    case 'k':
-      win.focused.destroy();
-      break;
-    case 'w': // tmux
-    case '"': // screen
-      break;
-    default:
-      if (key >= '0' && key <= '9') {
-        key = +key;
-        // 1-indexed
-        key--;
-        if (!~key) key = 9;
-        if (win.tabs[key]) {
-          win.tabs[key].focus();
-        }
-      }
-      break;
-  }
+  this.on('request term previous', function(key) {
+    this.window.previousTab();
+  });
 };
 
 Tab.prototype._ignoreNext = function() {
@@ -814,6 +811,17 @@ Tab.prototype._ignoreNext = function() {
  * Program-specific Features
  */
 
+Tab.scrollable = {
+  irssi: true,
+  man: true,
+  less: true,
+  htop: true,
+  top: true,
+  w3m: true,
+  lynx: true,
+  mocp: true
+};
+
 Tab.prototype._bindMouse = Tab.prototype.bindMouse;
 
 Tab.prototype.bindMouse = function() {
@@ -825,19 +833,9 @@ Tab.prototype.bindMouse = function() {
     ? 'mousewheel'
     : 'DOMMouseScroll';
 
-  var programs = {
-    irssi: true,
-    man: true,
-    less: true,
-    htop: true,
-    top: true,
-    w3m: true,
-    lynx: true
-  };
-
   on(self.element, wheelEvent, function(ev) {
     if (self.mouseEvents) return;
-    if (!programs[self.process]) return;
+    if (!Tab.scrollable[self.process]) return;
 
     if ((ev.type === 'mousewheel' && ev.wheelDeltaY > 0)
         || (ev.type === 'DOMMouseScroll' && ev.detail < 0)) {

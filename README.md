@@ -3,6 +3,12 @@
 A terminal in your browser using node.js and socket.io. Based on Fabrice
 Bellard's vt100 for [jslinux](http://bellard.org/jslinux/).
 
+For the standalone web terminal, see
+[**term.js**](https://github.com/chjj/term.js).
+
+For the lowlevel terminal spawner, see
+[**pty.js**](https://github.com/chjj/pty.js).
+
 ## Screenshots
 
 ### irssi
@@ -24,6 +30,7 @@ Bellard's vt100 for [jslinux](http://bellard.org/jslinux/).
 - Ability to efficiently render programs: vim, mc, irssi, vifm, etc.
 - Support for xterm mouse events
 - 256 color support
+- Persistent sessions
 
 ## Install
 
@@ -33,7 +40,7 @@ $ npm install tty.js
 
 ## Usage
 
-tty.js is an app, but it's also possible to hook into it programatically
+tty.js is an app, but it's also possible to hook into it programatically.
 
 ``` js
 var tty = require('tty.js');
@@ -74,10 +81,13 @@ JSON file. An example configuration file looks like:
   "static": "./static",
   "limitGlobal": 10000,
   "limitPerUser": 1000,
+  "localOnly": false,
   "cwd": ".",
   "syncSession": false,
   "sessionTimeout": 600000,
   "log": true,
+  "io": { "log": false },
+  "debug": false,
   "term": {
     "termName": "xterm",
     "geometry": [80, 24],
@@ -153,8 +163,14 @@ The distance to go before full xterm compatibility.
 - Origin Mode, Insert Mode
 - Proper Tab Setting
 
+## Contribution and License Agreement
+
+If you contribute code to this project, you are implicitly allowing your code
+to be distributed under the MIT license. You are also implicitly verifying that
+all code is your original work. `</legalese>`
+
 ## License
 
-Copyright (c) 2012, Christopher Jeffrey (MIT License)
+Copyright (c) 2012-2014, Christopher Jeffrey (MIT License)
 
 [1]: http://invisible-island.net/xterm/ctlseqs/ctlseqs.html#Mouse%20Tracking
